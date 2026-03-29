@@ -69,35 +69,33 @@ import urllib.parse
 import time
 
 def generate_image_hf(prompt: str) -> str:
-    """State-of-the-art Flux powered image generation via Pollinations."""
-    print(f"--- Flux Prompt: {prompt[:60]} ---")
+    """Robust image generation with high-fidelity models and 60s persistence."""
+    print(f"--- Prompt: {prompt[:60]} ---")
     
-    # 1. Primary: Pollinations FLUX Engine (Best for subject accuracy)
-    try:
-        encoded = urllib.parse.quote(prompt)
-        # Using the latest Flux-Schnet or Flux-Pro (free if available)
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=800&height=512&nologo=true&seed={int(time.time())}"
-        print(f"Calling Flux Engine...")
-        res = requests.get(url, timeout=40)
-        if res.status_code == 200 and len(res.content) > 1000:
-            print("FLUX SUCCESS")
-            return base64.b64encode(res.content).decode("utf-8")
-        print(f"Flux Fail (Status {res.status_code})")
-    except Exception as e:
-        print(f"Flux Engine error: {e}")
+    # 1. State-of-the-art Model Fleet
+    model_fleet = [
+        "stabilityai/stable-diffusion-3.5-large",
+        "black-forest-labs/FLUX.1-schnell",
+        "stabilityai/stable-diffusion-xl-base-1.0"
+    ]
+    
+    headers_hf = {"Authorization": f"Bearer {HF_API_KEY}"}
+    
+    # 2. Try the High-Fidelity Fleet
+    for model_id in model_fleet:
+        try:
+            url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
+            print(f"Trying High-Fidelity AI: {model_id}")
+            res = requests.post(url, headers=headers_hf, json={"inputs": prompt}, timeout=60) # 60s Persistence
+            if res.status_code == 200 and len(res.content) > 1000:
+                print(f"SUCCESS: {model_id}")
+                return base64.b64encode(res.content).decode("utf-8")
+            print(f"Model {model_id} busy/fail (Status {res.status_code})")
+        except Exception as e:
+            print(f"Network error on {model_id}: {e}")
 
-    # 2. EMERGENCY Aesthetic Fallback (Picsum)
-    try:
-        import random
-        seed = random.randint(1, 1000)
-        fallback_url = f"https://picsum.photos/seed/{seed}/800/512"
-        print(f"Total AI failure. Using aesthetic fallback visual.")
-        res = requests.get(fallback_url, timeout=10)
-        if res.status_code == 200:
-            return base64.b64encode(res.content).decode("utf-8")
-    except Exception as e:
-        print(f"Critical failure: {e}")
-
+    # 3. NO MORE BEACHES. If the fleet fails, we return None to let Node handle the error properly.
+    print("AI Fleet exhausted. No valid image generated.")
     return None
 
 async def process_pitch(text: str, style: str) -> list:
