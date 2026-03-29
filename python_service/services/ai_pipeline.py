@@ -41,15 +41,16 @@ def get_best_model():
 model = get_best_model()
 
 def refine_prompt(sentence: str, style: str) -> str:
-    """Uses Gemini to turn a sentence into a concise, high-impact image prompt."""
+    """Uses Gemini to turn a sentence into a high-impact, 'Flux-Optimized' visual prompt."""
     prompt = f"""
-    Convert the following sentence into a SHORT, high-impact visual prompt for an image generator.
+    Create a SHORT visual prompt for an image generator from the sentence below.
     
-    IMPORTANT RULES:
-    1. Do NOT use technical words like 'camera', 'lens', 'shutter', or 'photography'.
-    2. Focus purely on the SUBJECT, the ENVIRONMENT, and the ATMOSPHERE.
-    3. The style must be: '{style}'.
-    4. Keep it under 40 words.
+    IMPORTANT:
+    1. Start the prompt with the main SUBJECT (e.g. 'An Apple Tree') to ensure it is the focus.
+    2. Then add the ATMOSPHERE and ENVIRONMENT.
+    3. Mandatory style: '{style}'.
+    4. NO technical photography jargon allowed.
+    5. Max 30 words.
     
     Sentence: "{sentence}"
     
@@ -57,50 +58,45 @@ def refine_prompt(sentence: str, style: str) -> str:
     """
     try:
         response = model.generate_content(prompt)
+        # Force subject-first weighting for the generator
         return response.text.replace('"', '').strip()
     except Exception as e:
         print(f"Error in Gemini prompt refinement: {e}")
-        # Fallback to original text + style
-        return f"{sentence}. highly detailed, intricate, {style} style, amazing lighting"
+        return f"{sentence}. focused on subject, vibrant, {style} style."
 
 import requests
+import urllib.parse
+import time
 
 def generate_image_hf(prompt: str) -> str:
-    """Robust image generation with a fleet of models and 30s patience."""
-    print(f"--- Prompt: {prompt[:50]} ---")
+    """State-of-the-art Flux powered image generation via Pollinations."""
+    print(f"--- Flux Prompt: {prompt[:60]} ---")
     
-    # The "High Availability" Fleet
-    model_fleet = [
-        "stabilityai/stable-diffusion-3.5-large",
-        "black-forest-labs/FLUX.1-schnell",
-        "runwayml/stable-diffusion-v1-5"
-    ]
-    
-    headers_hf = {"Authorization": f"Bearer {HF_API_KEY}"}
-    
-    # 1. Try the Fleet
-    for model_id in model_fleet:
-        try:
-            url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
-            print(f"Trying AI Model: {model_id}")
-            res = requests.post(url, headers=headers_hf, json={"inputs": prompt}, timeout=30) # 30s Patience
-            if res.status_code == 200 and len(res.content) > 1000:
-                print(f"SUCCESS: {model_id}")
-                return base64.b64encode(res.content).decode("utf-8")
-        except Exception as e:
-            print(f"Model {model_id} failed: {e}")
+    # 1. Primary: Pollinations FLUX Engine (Best for subject accuracy)
+    try:
+        encoded = urllib.parse.quote(prompt)
+        # Using the latest Flux-Schnet or Flux-Pro (free if available)
+        url = f"https://image.pollinations.ai/prompt/{encoded}?width=800&height=512&nologo=true&seed={int(time.time())}"
+        print(f"Calling Flux Engine...")
+        res = requests.get(url, timeout=40)
+        if res.status_code == 200 and len(res.content) > 1000:
+            print("FLUX SUCCESS")
+            return base64.b64encode(res.content).decode("utf-8")
+        print(f"Flux Fail (Status {res.status_code})")
+    except Exception as e:
+        print(f"Flux Engine error: {e}")
 
     # 2. EMERGENCY Aesthetic Fallback (Picsum)
     try:
         import random
         seed = random.randint(1, 1000)
         fallback_url = f"https://picsum.photos/seed/{seed}/800/512"
-        print(f"AI fleet exhausted. Using aesthetic fallback.")
+        print(f"Total AI failure. Using aesthetic fallback visual.")
         res = requests.get(fallback_url, timeout=10)
         if res.status_code == 200:
             return base64.b64encode(res.content).decode("utf-8")
     except Exception as e:
-        print(f"Extreme failure: {e}")
+        print(f"Critical failure: {e}")
 
     return None
 
