@@ -1,63 +1,82 @@
-require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const axios = require('axios');
-const Story = require('./models/Story');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:8000";
+const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8002';
 
-// Increase payload limit for base64 images
+// Hardened Payload Limits
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 
+// MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('Connected to MongoDB Successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-// Generate storyboard route
-app.post('/api/stories/generate', async (req, res) => {
+// Storyboard Schema
+const storyboardSchema = new mongoose.Schema({
+  originalText: String,
+  style: String,
+  panels: Array,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Storyboard = mongoose.model('Storyboard', storyboardSchema);
+
+// Generation Bridge
+app.post('/api/storyboard/generate', async (req, res) => {
+  const { text, style } = req.body;
+  
+  if (!text) {
+    return res.status(400).json({ success: false, error: 'Text input is required' });
+  }
+
+  console.log(`Forwarding request to AI Service: ${PYTHON_API_URL}/generate`);
+  
   try {
-    const { text, style } = req.body;
-    
-    if (!text) {
-      return res.status(400).json({ error: "Text is required" });
+    const aiResponse = await axios.post(`${PYTHON_API_URL}/generate`, {
+      text,
+      style
+    }, { timeout: 120000 }); // 2-minute persistence for high-res images
+
+    if (aiResponse.data.success) {
+      const newStoryboard = new Storyboard({
+        originalText: text,
+        style,
+        panels: aiResponse.data.panels
+      });
+      await newStoryboard.save();
+      res.json({ success: true, storyboard: newStoryboard });
+    } else {
+      res.status(500).json({ success: false, error: 'AI generation failed' });
     }
-
-    // Call Python FastAPI service for AI processing
-    const pythonRes = await axios.post(`${PYTHON_API_URL}/generate`, { text, style }, { timeout: 300000 }); // 5 minutes timeout
-    const panels = pythonRes.data.panels;
-
-    // Save history to MongoDB
-    const newStory = new Story({
-      original_pitch: text,
-      style: style,
-      panels: panels
-    });
-
-    const savedStory = await newStory.save();
-    
-    // Return to frontend
-    res.status(200).json(savedStory);
-
   } catch (error) {
-    console.error("Generate error:", error.response?.data || error.message);
-    res.status(500).json({ error: "Failed to generate storyboard. Please try again later." });
+    console.error('Bridge Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: `AI Service Error: ${error.message}. Is the AI Service running on ${PYTHON_API_URL}?` 
+    });
   }
 });
 
-// Fetch all stories
-app.get('/api/stories', async (req, res) => {
+// Database Get
+app.get('/api/storyboard/:id', async (req, res) => {
   try {
-    const stories = await Story.find().sort({ createdAt: -1 });
-    res.status(200).json(stories);
+    const storyboard = await Storyboard.findById(req.params.id);
+    if (!storyboard) return res.status(404).json({ success: false, error: 'Not found' });
+    res.json({ success: true, storyboard });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch stories" });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Node Backend running on http://localhost:${PORT}`);
 });
