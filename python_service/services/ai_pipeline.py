@@ -41,17 +41,19 @@ def get_best_model():
 model = get_best_model()
 
 def refine_prompt(sentence: str, style: str) -> str:
-    """Uses Gemini to turn a sentence into a detailed image generation prompt."""
+    """Uses Gemini to turn a sentence into a concise, high-impact image prompt."""
     prompt = f"""
-    You are an expert AI image prompt engineer. I am providing you with a sentence from a product pitch narrative.
-    I need you to convert this sentence into a HIGHLY DESCRIPTIVE, VISUALLY STUNNING prompt for a text-to-image model (like Stable Diffusion).
-    Include details about lighting, camera angle, subject, atmosphere, and artistic style.
+    Convert the following sentence into a SHORT, high-impact visual prompt for an image generator.
     
-    The requested overall style is: '{style}'. Make sure it aligns with this.
+    IMPORTANT RULES:
+    1. Do NOT use technical words like 'camera', 'lens', 'shutter', or 'photography'.
+    2. Focus purely on the SUBJECT, the ENVIRONMENT, and the ATMOSPHERE.
+    3. The style must be: '{style}'.
+    4. Keep it under 40 words.
     
     Sentence: "{sentence}"
     
-    Output ONLY the engineered prompt, without any introductions, quotes, or conversational text.
+    Output ONLY the visual prompt.
     """
     try:
         response = model.generate_content(prompt)
